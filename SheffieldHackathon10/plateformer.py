@@ -12,9 +12,10 @@ FPS = 60
 PLAYER_VEL = 6
 TILE_SIZE = 32
 MAX_LIVES = 5
+aah_sound= pygame.mixer.Sound("ahh.wav")
 
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("L'Odyssée : Le Retour du Roi")
+pygame.display.set_caption("The Java Odyssey")
 
 # Couleurs
 BLACK = (0, 0, 0)
@@ -65,7 +66,9 @@ def load_cyclops_portrait(): return load_sprite("cyclope_portrait.png")
 def load_siren1_portrait(): return load_sprite("siren1.png")
 def load_siren2_portrait(): return load_sprite("siren2.png")
 def load_game_over_image(): return load_sprite("game_over_img.png")
-def load_victory_image(): return load_sprite("absolute_cinema.png")
+# Note: Assurez-vous que l'extension correspond à votre fichier (.jpg ou .png)
+def load_victory_image(): return load_sprite("absolute_cinema.jpg") 
+
 
 def load_background():
     bg = load_sprite("background.png", (WIDTH, HEIGHT))
@@ -277,10 +280,16 @@ class Player(pygame.sprite.Sprite):
         self.sprite_image = sprite_image
         self.sprite_flipped = pygame.transform.flip(sprite_image, True, False) if sprite_image else None
         self.lives = MAX_LIVES
+        self.wall_direction = 0 # 0: Pas de mur, -1: Gauche, 1: Droite
         
     def jump(self):
-        if self.jump_count < 2:
-            self.y_vel = self.JUMP_STRENGTH
+        # SAUT MURAL (Wall Jump)
+        if self.wall_direction != 0 and not self.on_ground:
+            self.y_vel = -12
+            self.jump_count = 0 # Réinitialise les sauts pour pouvoir enchainer
+        # SAUT NORMAL / DOUBLE SAUT
+        elif self.jump_count < 2:
+            self.y_vel = -12
             self.jump_count += 1
             self.on_ground = False
     
@@ -290,11 +299,33 @@ class Player(pygame.sprite.Sprite):
     
     def update(self, platforms):
         self.y_vel = min(self.y_vel + self.GRAVITY, 15)
-        self.move(self.x_vel, 0)
-        self.check_collision_x(platforms)
-        self.move(0, self.y_vel)
+        
+        # Mouvement X
+        self.rect.x += self.x_vel
+        self._check_x_collisions(platforms)
+        
+        # DÉTECTION DES MURS (pour le saut mural)
+        self.wall_direction = 0
+        
+        # Vérifie à droite
+        self.rect.x += 2
+        for p in platforms:
+            if self.rect.colliderect(p.rect):
+                self.wall_direction = 1
+        self.rect.x -= 2
+        
+        # Vérifie à gauche (seulement si pas de mur à droite)
+        if self.wall_direction == 0:
+            self.rect.x -= 2
+            for p in platforms:
+                if self.rect.colliderect(p.rect):
+                    self.wall_direction = -1
+            self.rect.x += 2
+
+        # Mouvement Y
+        self.rect.y += self.y_vel
         self.on_ground = False
-        self.check_collision_y(platforms)
+        self._check_y_collisions(platforms)
         self.rect.clamp_ip(window.get_rect())
     
     def check_collision_x(self, platforms):
@@ -303,16 +334,22 @@ class Player(pygame.sprite.Sprite):
                 if self.x_vel > 0: self.rect.right = platform.rect.left
                 elif self.x_vel < 0: self.rect.left = platform.rect.right
     
-    def check_collision_y(self, platforms):
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
+    def _check_x_collisions(self, platforms):
+        for p in platforms:
+            if self.rect.colliderect(p.rect):
+                if self.x_vel > 0: self.rect.right = p.rect.left
+                elif self.x_vel < 0: self.rect.left = p.rect.right
+
+    def _check_y_collisions(self, platforms):
+        for p in platforms:
+            if self.rect.colliderect(p.rect):
                 if self.y_vel > 0:
-                    self.rect.bottom = platform.rect.top
+                    self.rect.bottom = p.rect.top
                     self.y_vel = 0
                     self.on_ground = True
                     self.jump_count = 0
                 elif self.y_vel < 0:
-                    self.rect.top = platform.rect.bottom
+                    self.rect.top = p.rect.bottom
                     self.y_vel = 0
     
     def draw(self, surface):
@@ -323,7 +360,7 @@ class Player(pygame.sprite.Sprite):
             pygame.draw.rect(surface, (255, 0, 0), self.rect)
 
 class Cyclops(pygame.sprite.Sprite):
-    SPEED = 1.5
+    SPEED = 2
     def __init__(self, x, y, sprite_image=None):
         super().__init__()
         width = sprite_image.get_width() if sprite_image else 32
@@ -657,6 +694,7 @@ def main():
                 
                 window.blit(big_font.render("GAME OVER", True, (255, 0, 0)), (WIDTH // 2 - 150, HEIGHT // 2 - 50))
                 window.blit(font.render("Press R to restart", True, WHITE), (WIDTH // 2 - 250, HEIGHT // 2 + 20))
+                pygame.mixer.Sound.play(aah_sound)
         
         pygame.display.flip()
     
